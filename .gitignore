@@ -1,0 +1,16 @@
+data/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+*.db
+*.db-wal
+*.db-shm
+fastembed_cache/
+graph.json
+graph.json.bak
+graph.json.migrated
+.env
+.DS_Store
