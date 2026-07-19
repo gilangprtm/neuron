@@ -11,6 +11,6 @@ COPY main.py .
 # Data directory for graph.db, fastembed cache, vault mirror
 RUN mkdir -p /app/data
 
-EXPOSE 8000
+EXPOSE 9120
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9120"]

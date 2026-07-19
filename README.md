@@ -25,12 +25,12 @@ source .venv/bin/activate
 
 pip install -r requirements.txt
 export NEURON_API_KEY=change-me   # optional; empty = no auth
-uvicorn main:app --host 0.0.0.0 --port 8000
+uvicorn main:app --host 0.0.0.0 --port 9120
 ```
 
 Health check:
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:9120/health
 ```
 
 ## Docker / Coolify
@@ -38,7 +38,7 @@ curl http://localhost:8000/health
 ```bash
 docker build -t neuron .
 docker run -d \
-  -p 8000:8000 \
+  -p 9120:9120 \
   -e NEURON_API_KEY=change-me \
   -e NEURON_VAULT_PATH=/app/vault \
   -v neuron-data:/app/data \
@@ -46,7 +46,7 @@ docker run -d \
   neuron
 ```
 
-Coolify: set build pack Docker, port 8000, env `NEURON_API_KEY`, volume `/app/data`.
+Coolify: set build pack Docker, port 9120, env `NEURON_API_KEY`, volume `/app/data`.
 
 ## API
 
@@ -70,13 +70,13 @@ when the env is set.
 
 ```bash
 # Store a fact
-curl -X POST http://localhost:8000/api/neurons/remember \
+curl -X POST http://localhost:9120/api/neurons/remember \
   -H "Content-Type: application/json" \
   -H "X-API-Key: change-me" \
   -d '{"content":"CSP nonce must be generated BEFORE call_next","source":"hermes"}'
 
 # Query
-curl -X POST http://localhost:8000/api/neurons/activate \
+curl -X POST http://localhost:9120/api/neurons/activate \
   -H "Content-Type: application/json" \
   -H "X-API-Key: change-me" \
   -d '{"query":"CSP nonce middleware","top_k":5}'
