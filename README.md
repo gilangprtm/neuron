@@ -13,6 +13,45 @@ Any agent (Hermes, Odys, custom) can use it as a persistent brain.
 - **Remember**: free-form fact import from any agent
 - **Sync vault**: scan Obsidian markdown → vault_note nodes + wikilink edges
 
+The all-in-one pattern — single docker-compose.yml on VPS:
+```yaml
+version: '3.8'
+
+services:
+  neuron:
+    build: .
+    container_name: neuron
+    volumes:
+      - neuron-data:/app/data
+      - neuron-vault:/app/Neuron-Vault
+    ports:
+      - "9120:9120"
+    environment:
+      - NEURON_API_KEY=change-me
+      - NEURON_VAULT_PATH=/app/Neuron-Vault
+    restart: unless-stopped
+
+  hermes:
+    image: hermes:latest
+    container_name: hermes
+    depends_on:
+      - neuron
+    volumes:
+      - hermes-data:/app/data
+      - neuron-vault:/app/Neuron-Vault   # same volume
+    ports:
+      - "9119:9119"
+    environment:
+      - NEURON_API_KEY=change-me
+      - NEURON_HOST=http://neuron:9120
+    restart: unless-stopped
+
+volumes:
+  neuron-data:
+  neuron-vault:
+  hermes-data:
+```
+
 ## Quick start (local)
 
 ```bash
@@ -40,13 +79,54 @@ docker build -t neuron .
 docker run -d \
   -p 9120:9120 \
   -e NEURON_API_KEY=change-me \
-  -e NEURON_VAULT_PATH=/app/vault \
+  -e NEURON_VAULT_PATH=/app/Neuron-Vault \
   -v neuron-data:/app/data \
-  -v /path/to/vault:/app/vault:ro \
+  -v neuron-vault:/app/Neuron-Vault \
   neuron
 ```
 
-Coolify: set build pack Docker, port 9120, env `NEURON_API_KEY`, volume `/app/data`.
+Coolify: set build pack Docker, port 9120, env `NEURON_API_KEY` + `NEURON_VAULT_PATH`, volumes `/app/data` and `/app/Neuron-Vault`. Neuron-Vault is the shared volume Hermes will also mount.
+
+## Deployment notes: Linux VPS vs Windows Docker Desktop
+
+### Linux VPS (e.g. Coolify, Docker-Compose)
+```
+volumes:
+  - host-path:/app/Neuron-Vault   # bind mount from host
+```
+Example: `- /home/sira/vault:/app/Neuron-Vault`
+
+### Windows Docker Desktop
+Windows absolute paths in Docker maps work as:
+```
+volumes:
+  - C:/Users/gilang/Documents/Sao-Vault:/app/Neuron-Vault
+```
+Docker Desktop handles the translation automatically — inside the container `/app/Neuron-Vault` behaves identically to Linux. Hermes container mounts the same volume.
+
+### Docker volumes (no bind)
+If you prefer Docker-managed volumes (portable, no host path dependency):
+```yaml
+volumes:
+  neuron-vault:
+
+services:
+  neuron:
+    volumes:
+      - neuron-vault:/app/Neuron-Vault
+  hermes:
+    volumes:
+      - neuron-vault:/app/Neuron-Vault
+```
+This works identically on Linux and Windows — Docker Desktop maps it to a Windows path transparently.
+
+### First boot
+On first startup, Neuron Service auto-creates `Neuron-Vault/` with:
+```
+AGENTS.md  AGENTS-core.md  AGENTS-memory.md  SCHEMA.md
+wiki/  raw/  Sessions/  Philosophy/  graphify-out/  _templates/
+```
+No manual creation needed. After creation, sync vault → graph runs automatically.
 
 ## API
 

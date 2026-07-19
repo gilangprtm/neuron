@@ -668,6 +668,199 @@ def list_nodes(include_archived: bool = False) -> dict:
     return {"ok": True, "nodes": [n.to_dict() for n in nodes]}
 
 
+# ── Vault auto-provision + boot ───────────────────────────────
+
+VAULT_ENV_KEY = "NEURON_VAULT_PATH"
+
+
+def get_vault_path() -> Path:
+    """Resolve vault path from env or default."""
+    import os
+    raw = os.environ.get(VAULT_ENV_KEY, "")
+    if raw:
+        return Path(raw).resolve()
+    return Path("Neuron-Vault").resolve()
+
+
+_VAULT_STRUCTURE: dict[str, str] = {
+    "AGENTS.md": """---
+title: "AGENTS.md — Agent Instructions (index)"
+date: 2026-07-19
+status: canonical
+---
+
+# Agent Instructions
+
+> **Index** for all agents connecting to this Neuron vault.
+
+## Who
+
+**Neuron** — Standalone memory hub for Sira / Hermes / any agent.
+
+## Vault
+
+**Path (dynamic):** `/app/Neuron-Vault`
+`wiki/` · `Sessions/` · `Philosophy/` · `raw/` · `graphify-out/`
+
+## Chunks (read on-demand)
+
+| File | Content |
+|------|---------|
+| [[AGENTS-core]] | identity + hard rules |
+| [[AGENTS-memory]] | continuity, session, vault layout |
+
+## Quick rules (always active)
+
+1. **Pre-check memory** before answering old topics.
+2. **Grill** multi-meaning ideas; not yes-man.
+3. **Terminal evidence** before claiming done.
+4. **Hard-gate** PRD before multi-step coding.
+5. Failed debug **3x** → stop & discuss.
+
+## Sync memory
+
+- Auto: cron **1 hour** + daily 09:00
+- Manual: `POST /api/neurons/sync-vault`
+
+## Related
+
+- [[AGENTS-core]]
+- [[AGENTS-memory]]
+""",
+
+    "SCHEMA.md": """---
+title: "SCHEMA — Vault Operating Instructions"
+date: 2026-07-19
+status: canonical
+---
+
+# SCHEMA
+
+## Folder Map
+
+| Path | Purpose |
+|------|---------|
+| `Philosophy/` | DNA: SIS + SOM |
+| `wiki/` | Compiled knowledge base |
+| `wiki/journal/` | Daily digests |
+| `raw/` | Incoming unprocessed sources |
+| `ingested/` | Processed source archive |
+| `graphify-out/` | Graphify index output |
+| `_templates/` | Note / PRD templates |
+| `AGENTS.md` | Agent rules (auto-read) |
+
+## Rules
+
+1. Every `wiki/` page needs YAML frontmatter
+2. Use `[[wikilinks]]` between notes
+3. Prefer update over create-duplicate
+4. Journal files: `wiki/journal/YYYY-MM-DD.md`
+5. Drop new sources into `raw/`; after processing move to `ingested/`
+6. Do not hand-edit `graphify-out/` — regenerate via `graphify update`
+""",
+
+    "AGENTS-core.md": """---
+title: "AGENTS-core"
+---
+
+# Core Identity
+
+**Sira** — AI Engineer. Permanent memory.
+Knowledge graph powered by Neuron Service.
+""",
+
+    "AGENTS-memory.md": """---
+title: "AGENTS-memory"
+---
+
+# Memory Continuity
+
+- Graph persists across sessions via Neuron Service.
+- Facts stored via `POST /api/neurons/remember`.
+- Context injected via `POST /api/neurons/activate`.
+- Decay: edges weaken if unused (6h cycle).
+""",
+}
+
+_VAULT_DIRS = [
+    "wiki",
+    "wiki/journal",
+    "raw",
+    "Sessions",
+    "Philosophy",
+    "graphify-out",
+    "_templates",
+    "ingested",
+]
+
+
+def _seed_vault(vault: Path) -> dict[str, Any]:
+    """Create vault skeleton + seed files. Returns creation stats."""
+    created_files: list[str] = []
+    created_dirs: list[str] = []
+
+    for d in _VAULT_DIRS:
+        p = vault / d
+        if not p.exists():
+            p.mkdir(parents=True, exist_ok=True)
+            created_dirs.append(d)
+
+    for name, content in _VAULT_STRUCTURE.items():
+        p = vault / name
+        if not p.exists():
+            p.write_text(content, encoding="utf-8")
+            created_files.append(name)
+
+    return {
+        "created_dirs": created_dirs,
+        "created_files": created_files,
+        "total_dirs": len(created_dirs),
+        "total_files": len(created_files),
+    }
+
+
+def natural_boot() -> dict[str, Any]:
+    """Startup hook: ensure vault exists, seed if empty, sync to graph.
+
+    Called once on server startup. Safe to call multiple times (idempotent).
+    """
+    vault = get_vault_path()
+    logger.info("[neuron] natural_boot: vault=%s", vault)
+
+    # Step 1: create vault skeleton if new
+    seed = _seed_vault(vault)
+
+    # Step 2: load graph
+    g = get_graph()
+
+    # Step 3: sync vault → graph
+    try:
+        from src.vault_sync import sync_vault_notes
+        sync_result = sync_vault_notes(vault, link_wikilinks=True)
+    except Exception as e:
+        logger.warning("[neuron] vault sync failed: %s", e)
+        sync_result = {"ok": False, "error": str(e)}
+
+    # Step 4: status
+    st = g.status()
+
+    result = {
+        "ok": True,
+        "vault_path": str(vault),
+        "vault_exists": vault.exists(),
+        "seed": seed,
+        "sync": sync_result,
+        "graph": st.get("stats", {}),
+    }
+    logger.info(
+        "[neuron] natural_boot done: %d files, %d nodes, %d edges",
+        sync_result.get("upserted", 0),
+        st.get("stats", {}).get("node_count", 0),
+        st.get("stats", {}).get("edge_count", 0),
+    )
+    return result
+
+
 # Expose for backward compatibility
 __all__ = [
     "NeuronNode",
@@ -681,4 +874,6 @@ __all__ = [
     "activate",
     "status",
     "list_nodes",
+    "natural_boot",
+    "get_vault_path",
 ]

@@ -157,6 +157,12 @@ def api_remember(body: RememberBody):
     return result
 
 
+@app.post("/api/neurons/boot", dependencies=[Depends(_require_api_key)])
+def api_boot():
+    """Run natural_boot() on demand — re-seed vault + resync graph."""
+    return neurons.natural_boot()
+
+
 @app.delete("/api/neurons/nodes/{node_id}", dependencies=[Depends(_require_api_key)])
 def api_delete_node(node_id: str):
     return neurons.delete_node(node_id)
@@ -164,5 +170,10 @@ def api_delete_node(node_id: str):
 
 @app.on_event("startup")
 def on_startup():
-    """Warm the graph so first request is fast."""
-    neurons.get_graph()
+    """Warm the graph and ensure vault exists."""
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    try:
+        neurons.natural_boot()
+    except Exception as e:
+        logging.error("natural_boot failed: %s", e)
